@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0D0D14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WindMicro">
+  <meta name="description" content="Companion app for your micro wind turbine">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>WindMicro</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; background: #0D0D14; overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+      color: #F0F0FF;
+      max-width: 430px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    /* Safe area padding for notch/home bar */
+    .safe-top { padding-top: env(safe-area-inset-top, 12px); }
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 16px); }
+
+    /* STATUS BAR */
+    .status-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: max(env(safe-area-inset-top, 10px), 10px) 20px 6px;
+      font-size: 12px; color: #888; background: #0D0D14;
+      position: sticky; top: 0; z-index: 100;
+    }
+
+    /* PAGES */
+    .page { display: none; flex-direction: column; height: calc(100vh - 44px); overflow-y: auto; scrollbar-width: none; }
+    .page::-webkit-scrollbar { display: none; }
+    .page.active { display: flex; }
+
+    /* SHARED */
+    .section-title { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+    .back-btn { display: flex; align-items: center; gap: 6px; color: #1DC878; font-size: 14px; font-weight: 500; cursor: pointer; padding: 14px 16px 6px; background: none; border: none; }
+
+    /* HOME */
+    .home-header { padding: 14px 16px 10px; display: flex; justify-content: space-between; align-items: center; }
+    .device-name { font-size: 20px; font-weight: 700; color: #F0F0FF; }
+    .sub-name { font-size: 12px; color: #555; margin-top: 2px; }
+    .live-pill { display: flex; align-items: center; gap: 5px; background: rgba(29,200,120,0.12); color: #1DC878; font-size: 12px; font-weight: 600; padding: 6px 13px; border-radius: 20px; border: 1px solid rgba(29,200,120,0.25); }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #1DC878; animation: blink 1.8s infinite; }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:.3} }
+
+    .hero-card {
+      margin: 0 16px 12px;
+      background: linear-gradient(135deg, #1A1A2E 0%, #16213E 100%);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 24px; padding: 20px;
+      position: relative; overflow: hidden; cursor: pointer;
+      transition: transform .1s;
+    }
+    .hero-card:active { transform: scale(0.985); }
+    .hero-card::before { content:''; position:absolute; top:-40px; right:-40px; width:160px; height:160px; background: radial-gradient(circle, rgba(29,200,120,0.13) 0%, transparent 70%); border-radius: 50%; pointer-events: none; }
+    .hero-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+    .hero-row { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 16px; }
+    .hero-watt { font-size: 56px; font-weight: 700; color: #F0F0FF; line-height: 1; letter-spacing: -2px; }
+    .hero-unit { font-size: 16px; color: #888; margin-bottom: 10px; margin-left: 4px; }
+    .tap-hint { font-size: 11px; color: #1DC878; opacity: .7; margin-top: 6px; }
+    .batt-label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; }
+    .batt-label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: .06em; }
+    .batt-pct { font-size: 14px; font-weight: 600; color: #F0F0FF; }
+    .batt-track { height: 8px; background: rgba(255,255,255,0.07); border-radius: 4px; overflow: hidden; }
+    .batt-fill { height: 100%; border-radius: 4px; transition: width .5s; }
+    .batt-eta { font-size: 11px; color: #444; margin-top: 6px; }
+
+    .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 16px 12px; }
+    .stat-card { background: #111118; border: 1px solid rgba(255,255,255,0.07); border-radius: 20px; padding: 16px; }
+    .stat-icon { font-size: 18px; color: #333; margin-bottom: 8px; }
+    .stat-val { font-size: 26px; font-weight: 600; color: #F0F0FF; letter-spacing: -0.5px; }
+    .stat-lbl { font-size: 11px; color: #444; margin-top: 2px; }
+    .stat-sub { font-size: 11px; color: #1DC878; margin-top: 4px; }
+
+    .gauge-card, .history-card {
+      margin: 0 16px 12px;
+      background: #111118;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 24px; padding: 16px;
+    }
+
+    .hist-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .hist-time { font-size: 11px; color: #444; min-width: 28px; }
+    .hist-bg { flex: 1; height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+    .hist-fill { height: 100%; border-radius: 4px; transition: width .5s; }
+    .hist-val { font-size: 11px; color: #555; min-width: 32px; text-align: right; }
+
+    .badges { display: flex; gap: 7px; flex-wrap: wrap; margin: 0 16px 12px; }
+    .badge { font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: 20px; }
+    .badge-g { background: rgba(29,200,120,0.1); color: #1DC878; border: 1px solid rgba(29,200,120,0.2); }
+    .badge-b { background: rgba(99,149,255,0.1); color: #6395FF; border: 1px solid rgba(99,149,255,0.2); }
+    .badge-a { background: rgba(255,168,50,0.1); color: #FFA832; border: 1px solid rgba(255,168,50,0.2); }
+
+    .add-btn {
+      margin: 4px 16px 20px;
+      width: calc(100% - 32px); padding: 16px;
+      background: rgba(29,200,120,0.07);
+      border: 1.5px dashed rgba(29,200,120,0.3);
+      border-radius: 18px; color: #1DC878;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: background .15s;
+    }
+    .add-btn:active { background: rgba(29,200,120,0.15); }
+
+    /* POWER PAGE */
+    .power-hero {
+      margin: 0 16px 14px;
+      background: linear-gradient(135deg, #0A2A1A 0%, #091520 100%);
+      border: 1px solid rgba(29,200,120,0.18);
+      border-radius: 24px; padding: 24px; text-align: center;
+    }
+    .power-big { font-size: 72px; font-weight: 700; color: #1DC878; letter-spacing: -3px; line-height: 1; }
+    .power-unit { font-size: 16px; color: rgba(29,200,120,0.6); margin-top: 4px; }
+    .power-peak { font-size: 12px; color: #444; margin-top: 10px; }
+
+    .power-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin: 0 16px 14px; }
+    .ps-card { background: #111118; border: 1px solid rgba(255,255,255,0.07); border-radius: 18px; padding: 14px 8px; text-align: center; }
+    .ps-val { font-size: 20px; font-weight: 600; color: #F0F0FF; }
+    .ps-lbl { font-size: 10px; color: #444; margin-top: 3px; }
+
+    .power-chart-card, .eff-card {
+      margin: 0 16px 14px;
+      background: #111118;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 24px; padding: 16px;
+    }
+
+    .eff-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .eff-row:last-child { border-bottom: none; }
+    .eff-label { font-size: 14px; color: #777; }
+    .eff-val { font-size: 14px; font-weight: 600; color: #F0F0FF; }
+    .eff-good { color: #1DC878; }
+
+    /* ADD DEVICE PAGE */
+    .add-page-header { padding: 14px 16px 16px; }
+    .add-page-title { font-size: 24px; font-weight: 700; color: #F0F0FF; margin-bottom: 4px; }
+    .add-page-sub { font-size: 13px; color: #444; }
+
+    .scan-area {
+      margin: 0 16px 16px;
+      background: #111118; border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 24px; padding: 32px 20px; text-align: center;
+    }
+    .scan-ring {
+      width: 100px; height: 100px; border-radius: 50%;
+      border: 2px dashed rgba(29,200,120,0.3);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 16px; animation: spin 8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .scan-icon { font-size: 38px; animation: spin 8s linear infinite reverse; display: block; }
+    .scan-label { font-size: 15px; font-weight: 600; color: #F0F0FF; margin-bottom: 6px; }
+    .scan-sub { font-size: 12px; color: #444; line-height: 1.5; }
+
+    .manual-btn {
+      margin: 0 16px 14px; width: calc(100% - 32px); padding: 15px;
+      background: rgba(99,149,255,0.08); border: 1px solid rgba(99,149,255,0.2);
+      border-radius: 18px; color: #6395FF; font-size: 14px; font-weight: 600;
+      cursor: pointer; text-align: center;
+    }
+    .manual-btn:active { background: rgba(99,149,255,0.15); }
+
+    .nearby-card, .my-devices-card {
+      margin: 0 16px 14px;
+      background: #111118; border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 24px; padding: 16px;
+    }
+
+    .nearby-item, .my-device-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+      cursor: pointer;
+    }
+    .nearby-item:last-child, .my-device-item:last-child { border-bottom: none; }
+    .nearby-item:active { opacity: 0.7; }
+
+    .device-dot {
+      width: 42px; height: 42px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    .dot-green { background: rgba(29,200,120,0.12); }
+    .dot-blue { background: rgba(99,149,255,0.12); }
+    .dot-amber { background: rgba(255,168,50,0.12); }
+
+    .nearby-info { flex: 1; min-width: 0; }
+    .nearby-name { font-size: 14px; font-weight: 600; color: #F0F0FF; }
+    .nearby-detail { font-size: 12px; color: #444; margin-top: 2px; }
+
+    .connect-chip {
+      font-size: 12px; font-weight: 600; color: #1DC878;
+      background: rgba(29,200,120,0.1); border: 1px solid rgba(29,200,120,0.2);
+      padding: 6px 12px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+    }
+    .connected-chip {
+      font-size: 12px; font-weight: 500; color: #444;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      padding: 6px 12px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+    }
+
+    /* INSTALL BANNER */
+    #install-banner {
+      display: none; position: fixed; bottom: env(safe-area-inset-bottom, 16px); left: 16px; right: 16px;
+      background: #1A1A2E; border: 1px solid rgba(29,200,120,0.3);
+      border-radius: 18px; padding: 14px 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 999;
+    }
+    #install-banner.hidden { display: none !important; }
+    .install-text { font-size: 13px; color: #CCC; flex: 1; }
+    .install-text strong { color: #F0F0FF; display: block; margin-bottom: 2px; }
+    .install-yes { background: #1DC878; color: #000; font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 12px; border: none; cursor: pointer; white-space: nowrap; }
+    .install-no { color: #555; font-size: 13px; background: none; border: none; cursor: pointer; padding: 8px; }
+
+    .bottom-spacer { height: 32px; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+<div class="status-bar">
+  <span id="clock">9:41</span>
+  <span style="display:flex;align-items:center;gap:8px;">
+    <svg width="16" height="12" viewBox="0 0 16 12" fill="#888"><rect x="0" y="4" width="3" height="8" rx="1"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="1"/><rect x="9" y="0" width="3" height="12" rx="1"/><rect x="13.5" y="1" width="2.5" height="11" rx="1" opacity=".3"/></svg>
+    <svg width="20" height="12" viewBox="0 0 20 12" fill="#888"><rect x="0" y="0" width="17" height="12" rx="2.5" stroke="#888" stroke-width="1.3" fill="none"/><rect x="17.5" y="3.5" width="2" height="5" rx="1" fill="#888"/><rect x="1.5" y="1.5" width="12" height="9" rx="1.5" fill="#888"/></svg>
+  </span>
+</div>
+
+<!-- HOME PAGE -->
+<div class="page active" id="page-home">
+  <div class="home-header">
+    <div>
+      <div class="device-name">WindMicro 1</div>
+      <div class="sub-name">Rooftop unit A</div>
+    </div>
+    <div class="live-pill"><div class="live-dot"></div>Live</div>
+  </div>
+
+  <div class="hero-card" onclick="goTo('page-power')">
+    <div class="hero-label">Power Output — tap for details</div>
+    <div class="hero-row">
+      <div>
+        <div style="display:flex;align-items:flex-end;gap:5px;">
+          <div class="hero-watt" id="watt-val">48</div>
+          <div class="hero-unit">W</div>
+        </div>
+        <div class="tap-hint">↗ Full analysis</div>
+      </div>
+      <canvas id="spark" width="90" height="50"></canvas>
+    </div>
+    <div>
+      <div class="batt-label-row">
+        <span class="batt-label">Battery</span>
+        <span class="batt-pct" id="batt-pct">72%</span>
+      </div>
+      <div class="batt-track"><div class="batt-fill" id="batt-fill" style="width:72%;background:#1DC878;"></div></div>
+      <div class="batt-eta" id="batt-eta">Est. full in ~2h 14m</div>
+    </div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-card">
+      <div class="stat-icon">⟳</div>
+      <div class="stat-val" id="rpm-val">320</div>
+      <div class="stat-lbl">RPM</div>
+      <div class="stat-sub" id="wind-lbl">Moderate</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">⚡</div>
+      <div class="stat-val" id="volt-val">13.2</div>
+      <div class="stat-lbl">Voltage (V)</div>
+      <div class="stat-sub">Nominal</div>
+    </div>
+  </div>
+
+  <div class="gauge-card">
+    <div class="section-title">Turbine Speed</div>
+    <canvas id="rpm-arc" style="width:100%;max-width:100%;" height="110"></canvas>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:#333;padding:4px 10px 0;">
+      <span>0</span><span>calm</span><span>moderate</span><span>brisk</span><span>600</span>
+    </div>
+  </div>
+
+  <div class="history-card">
+    <div class="section-title">Power Output — Last 6h</div>
+    <div id="hist-bars"></div>
+  </div>
+
+  <div class="badges">
+    <span class="badge badge-g">✓ Charging</span>
+    <span class="badge badge-b">⇌ Connected</span>
+    <span class="badge badge-a" id="wind-badge">~ Moderate wind</span>
+  </div>
+
+  <button class="add-btn" onclick="goTo('page-add')">
+    <span style="font-size:22px;line-height:1;">+</span> Add Device
+  </button>
+  <div class="bottom-spacer"></div>
+</div>
+
+<!-- POWER OUTPUT PAGE -->
+<div class="page" id="page-power">
+  <button class="back-btn" onclick="goTo('page-home')">← Back</button>
+
+  <div class="power-hero">
+    <div style="font-size:11px;color:rgba(29,200,120,0.5);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">Live Output</div>
+    <div class="power-big" id="p-watt">48</div>
+    <div class="power-unit">watts</div>
+    <div class="power-peak" id="p-peak">Peak today: 71W · Cut-in: 3.2 m/s</div>
+  </div>
+
+  <div class="power-stats">
+    <div class="ps-card">
+      <div class="ps-val" id="ps-kwh">1.8</div>
+      <div class="ps-lbl">kWh today</div>
+    </div>
+    <div class="ps-card">
+      <div class="ps-val" id="ps-avg">44</div>
+      <div class="ps-lbl">Avg W</div>
+    </div>
+    <div class="ps-card">
+      <div class="ps-val">6.2</div>
+      <div class="ps-lbl">kWh / week</div>
+    </div>
+  </div>
+
+  <div class="power-chart-card">
+    <div class="section-title">Output curve — today</div>
+    <canvas id="line-chart" style="width:100%;" height="100"></canvas>
+  </div>
+
+  <div class="eff-card">
+    <div class="section-title">Performance metrics</div>
+    <div class="eff-row"><span class="eff-label">Efficiency rating</span><span class="eff-val eff-good">82%</span></div>
+    <div class="eff-row"><span class="eff-label">Capacity factor</span><span class="eff-val">34%</span></div>
+    <div class="eff-row"><span class="eff-label">Tip speed ratio</span><span class="eff-val">6.1</span></div>
+    <div class="eff-row"><span class="eff-label">Power coefficient (Cp)</span><span class="eff-val eff-good">0.38</span></div>
+    <div class="eff-row"><span class="eff-label">Cut-in wind speed</span><span class="eff-val">3.2 m/s</span></div>
+    <div class="eff-row"><span class="eff-label">Rated wind speed</span><span class="eff-val">11.0 m/s</span></div>
+  </div>
+  <div class="bottom-spacer"></div>
+</div>
+
+<!-- ADD DEVICE PAGE -->
+<div class="page" id="page-add">
+  <button class="back-btn" onclick="goTo('page-home')">← Back</button>
+
+  <div class="add-page-header">
+    <div class="add-page-title">Add Device</div>
+    <div class="add-page-sub">Connect a turbine or battery pack</div>
+  </div>
+
+  <div class="scan-area">
+    <div class="scan-ring">
+      <span class="scan-icon">🌀</span>
+    </div>
+    <div class="scan-label">Scanning nearby…</div>
+    <div class="scan-sub">Keep your device powered on<br>and within 10 metres</div>
+  </div>
+
+  <button class="manual-btn">Enter device ID manually</button>
+
+  <div class="nearby-card">
+    <div class="section-title">Nearby devices</div>
+    <div class="nearby-item">
+      <div class="device-dot dot-green">🌬️</div>
+      <div class="nearby-info">
+        <div class="nearby-name">WindMicro 2</div>
+        <div class="nearby-detail">Micro turbine · 8 m away</div>
+      </div>
+      <div class="connect-chip">Connect</div>
+    </div>
+    <div class="nearby-item">
+      <div class="device-dot dot-blue">🔋</div>
+      <div class="nearby-info">
+        <div class="nearby-name">StorePack B1</div>
+        <div class="nearby-detail">Battery pack · 3 m away</div>
+      </div>
+      <div class="connect-chip">Connect</div>
+    </div>
+    <div class="nearby-item">
+      <div class="device-dot dot-amber">📡</div>
+      <div class="nearby-info">
+        <div class="nearby-name">WindMicro 3</div>
+        <div class="nearby-detail">Micro turbine · 15 m away</div>
+      </div>
+      <div class="connect-chip">Connect</div>
+    </div>
+  </div>
+
+  <div class="my-devices-card">
+    <div class="section-title">My devices</div>
+    <div class="my-device-item">
+      <div class="device-dot dot-green">🌬️</div>
+      <div class="nearby-info">
+        <div class="nearby-name">WindMicro 1</div>
+        <div class="nearby-detail">Rooftop unit A · Active now</div>
+      </div>
+      <div class="connected-chip">Connected</div>
+    </div>
+  </div>
+  <div class="bottom-spacer"></div>
+</div>
+
+<!-- INSTALL BANNER -->
+<div id="install-banner" class="hidden">
+  <div class="install-text">
+    <strong>Install WindMicro</strong>
+    Add to your home screen for the full app experience
+  </div>
+  <button class="install-yes" id="install-yes">Install</button>
+  <button class="install-no" onclick="document.getElementById('install-banner').classList.add('hidden')">✕</button>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────
+let rpm=320, watt=48, batt=72, kwhToday=1.8, volt=13.2;
+let history=[22,35,41,56,48,48];
+const histLabels=['-5h','-4h','-3h','-2h','-1h','now'];
+let sparkData=Array(24).fill(48);
+let lineData=Array(24).fill(0).map((_,i)=>Math.max(5,20+Math.sin(i/3)*18+Math.random()*8));
+
+// ── Navigation ─────────────────────────────────────
+function goTo(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const page = document.getElementById(id);
+  page.classList.add('active');
+  page.scrollTop = 0;
+  if(id==='page-power') setTimeout(drawLineChart, 50);
+}
+
+// ── Gauge ──────────────────────────────────────────
+function drawArc(r) {
+  const c = document.getElementById('rpm-arc');
+  if (!c) return;
+  const W = c.parentElement.offsetWidth - 32;
+  c.width = W; c.height = 110;
+  const ctx = c.getContext('2d');
+  const cx = W/2, cy = 106, rad = Math.min(W/2-10, 85);
+  ctx.clearRect(0,0,W,110);
+  ctx.beginPath(); ctx.arc(cx,cy,rad,Math.PI,2*Math.PI);
+  ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=11; ctx.lineCap='round'; ctx.stroke();
+  const frac = Math.min(r/600,1);
+  const col = frac<0.4?'#1DC878':frac<0.75?'#FFA832':'#FF5757';
+  ctx.beginPath(); ctx.arc(cx,cy,rad,Math.PI,Math.PI+frac*Math.PI);
+  ctx.strokeStyle=col; ctx.lineWidth=11; ctx.lineCap='round'; ctx.stroke();
+  const na = Math.PI+frac*Math.PI;
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+(rad-5)*Math.cos(na),cy+(rad-5)*Math.sin(na));
+  ctx.strokeStyle='#CCC'; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,cy,5,0,2*Math.PI); ctx.fillStyle='#CCC'; ctx.fill();
+}
+
+// ── Sparkline ──────────────────────────────────────
+function drawSpark() {
+  const c = document.getElementById('spark'); if(!c)return;
+  const ctx=c.getContext('2d'), W=90, H=50;
+  ctx.clearRect(0,0,W,H);
+  const max=Math.max(...sparkData,1), min=Math.min(...sparkData,0);
+  const pts=sparkData.map((v,i)=>[i/(sparkData.length-1)*W, H-4-(v-min)/(max-min+1)*(H-12)]);
+  const grad=ctx.createLinearGradient(0,0,W,0);
+  grad.addColorStop(0,'rgba(29,200,120,0.15)'); grad.addColorStop(1,'#1DC878');
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+  pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
+  ctx.strokeStyle=grad; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
+}
+
+// ── Line Chart ─────────────────────────────────────
+function drawLineChart() {
+  const c = document.getElementById('line-chart'); if(!c)return;
+  const W = c.parentElement.offsetWidth - 32;
+  c.width = W; c.height = 100;
+  const ctx=c.getContext('2d'), H=100;
+  ctx.clearRect(0,0,W,H);
+  const max=Math.max(...lineData,1);
+  const pts=lineData.map((v,i)=>[i/(lineData.length-1)*(W-10)+5, H-10-(v/max)*(H-20)]);
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'rgba(29,200,120,0.2)'); grad.addColorStop(1,'rgba(29,200,120,0)');
+  ctx.beginPath(); ctx.moveTo(pts[0][0],H-10);
+  pts.forEach(p=>ctx.lineTo(p[0],p[1]));
+  ctx.lineTo(pts[pts.length-1][0],H-10); ctx.closePath();
+  ctx.fillStyle=grad; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+  pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
+  ctx.strokeStyle='#1DC878'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
+  for(let i=0;i<lineData.length;i+=6){
+    ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pts[i][0],0); ctx.lineTo(pts[i][0],H-10); ctx.stroke();
+    ctx.fillStyle='#333'; ctx.font='9px -apple-system'; ctx.textAlign='center';
+    ctx.fillText(i+'h',pts[i][0],H-1);
+  }
+}
+
+// ── History bars ───────────────────────────────────
+function renderHist() {
+  const max=Math.max(...history,1);
+  document.getElementById('hist-bars').innerHTML=history.map((v,i)=>`
+    <div class="hist-bar-row">
+      <span class="hist-time">${histLabels[i]}</span>
+      <div class="hist-bg"><div class="hist-fill" style="width:${Math.round(v/max*100)}%;background:${i===history.length-1?'#1DC878':'rgba(29,200,120,0.3)'};"></div></div>
+      <span class="hist-val">${Math.round(v)}W</span>
+    </div>`).join('');
+}
+
+// ── Helpers ────────────────────────────────────────
+function windLabel(r) {
+  if(r<80)return'Calm'; if(r<200)return'Light breeze';
+  if(r<380)return'Moderate wind'; if(r<520)return'Brisk wind'; return'Strong wind';
+}
+function eta(b) {
+  if(b>=99)return'Battery full';
+  const m=Math.round((100-b)*1.95),h=Math.floor(m/60),mn=m%60;
+  return`Est. full in ~${h}h ${mn}m`;
+}
+
+// ── Update UI ──────────────────────────────────────
+function updateUI() {
+  document.getElementById('watt-val').textContent=Math.round(watt);
+  document.getElementById('rpm-val').textContent=Math.round(rpm);
+  document.getElementById('volt-val').textContent=volt.toFixed(1);
+  const bf=document.getElementById('batt-fill');
+  bf.style.width=Math.round(batt)+'%';
+  bf.style.background=batt<20?'#FF5757':batt<50?'#FFA832':'#1DC878';
+  document.getElementById('batt-pct').textContent=Math.round(batt)+'%';
+  document.getElementById('batt-eta').textContent=eta(batt);
+  const wl=windLabel(rpm);
+  document.getElementById('wind-lbl').textContent=wl;
+  document.getElementById('wind-badge').textContent='~ '+wl;
+  document.getElementById('p-watt').textContent=Math.round(watt);
+  document.getElementById('ps-kwh').textContent=kwhToday.toFixed(1);
+  document.getElementById('ps-avg').textContent=Math.round(watt*0.92);
+  history[history.length-1]=Math.round(watt);
+  sparkData.push(Math.round(watt)); sparkData.shift();
+  lineData.push(Math.round(watt)); lineData.shift();
+  renderHist(); drawArc(rpm); drawSpark();
+  if(document.getElementById('page-power').classList.contains('active')) drawLineChart();
+}
+
+// ── Simulation tick ────────────────────────────────
+function tick() {
+  rpm=Math.max(10,Math.min(590,rpm+(Math.random()-.48)*30));
+  watt=Math.max(0,rpm*0.16+(Math.random()-.5)*5);
+  volt=Math.max(11.5,Math.min(14.8,volt+(Math.random()-.5)*0.1));
+  batt=Math.min(100,batt+watt*0.00035);
+  kwhToday+=watt/3600000*3;
+  updateUI();
+}
+
+function clockTick() {
+  const el=document.getElementById('clock');
+  if(el) el.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+}
+
+// ── PWA Install prompt ─────────────────────────────
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  setTimeout(()=>document.getElementById('install-banner').classList.remove('hidden'), 2000);
+});
+document.getElementById('install-yes').addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById('install-banner').classList.add('hidden');
+});
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-banner').classList.add('hidden');
+});
+
+// ── Service Worker ─────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
+// ── Init ───────────────────────────────────────────
+updateUI();
+setInterval(tick, 1200);
+setInterval(clockTick, 30000);
+clockTick();
+window.addEventListener('resize', () => { drawArc(rpm); drawLineChart(); });
+</script>
+</body>
+</html>
